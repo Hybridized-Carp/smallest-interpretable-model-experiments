@@ -66,21 +66,26 @@ def FindOptExtStr(classification_instance, size, model=None, annotations=None):
         #two methods of size
         #if len(model[0])>=size:
         if sum(map(lambda a: a[0].bit_count(), model[0])) >= size:
+            print("death")
             return None
     else:
         example = None
     strict_exts = FindStrictExtStr(classification_instance, size, model, annotations, example)
     B = None
-        for strict_ext in strict_exts:
-            nModel, nAnnotations = strict_ext
-            if sum(map(lambda a: a[0].bit_count(), nModel[0])) <= size:
-                A = FindOptExtStr(classification_instance, size, nModel, nAnnotations)
-                if A != None
-                    if B == None:
-                        B=A
-                    elif sum(map(lambda a: a[0].bit_count(), B[0])) >sum(map(lambda a: a[0].bit_count(), A[0]))
+    for strict_ext in strict_exts:
+        nModel, nAnnotations = strict_ext
+        if sum(map(lambda a: a[0].bit_count(), nModel[0])) <= size:
+            A = FindOptExtStr(classification_instance, size, nModel, nAnnotations)
+            if A != None:
+                if B == None:
+                    B=A
+                elif sum(map(lambda a: a[0].bit_count(), B[0])) >sum(map(lambda a: a[0].bit_count(), A[0])):
+                    B=A
+    return B
+                 
 
 def FindStrictExtStr(classification_instance, size, model, annotations, example):
+    print("!")
     if model == None and annotations == None:
         for example in classification_instance[0]:
             if classification_instance[1](example) == 1:
@@ -104,14 +109,31 @@ def FindStrictExtStr(classification_instance, size, model, annotations, example)
                 nA[(t,example&t)]=example
                 tmodel=model.copy()
                 tmodel[0].append((t,example&t))
-                extensions.append(nA, tmodel)
+                extensions.append([tmodel,nA])
             t<<=1
             hmd>>=1
+        return extensions
+    #if multiple terms fuck us up how do we know that we chose the right one :(
     for term in model[0]:
+        if (example&term[0]) == term[1]:
+            break
+    ex2 = annotations[term]
+    hmd = (ex2^example)
+    t=1
+    while hmd >0:
+        if (hmd%2 == 1):
+            nA = annotations.copy()
+            tmodel=model.copy()
+            bitmask=t|term[0]
+            for temp in tmodel[0]:
+                if temp == term:
+                    temp=(bitmask,ex2&bitmask)
+            extensions.append([tmodel,nA])
+        t<<=1
+        hmd>>=1
+    return extensions
         
-        
-        
-
+a = FindOptModelStr((ddata,clsf),7)
 
 for i in ddata:
      if cdata[i] != dsdata[i]:
