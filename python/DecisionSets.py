@@ -1,3 +1,6 @@
+
+#class classification_instance
+
 #manual implementation of decision list
 def classification_rule(x):
     if (x & 8) == 0:
@@ -42,8 +45,7 @@ def ApplyDecisionSet(x, model):
     for term in model[0]:
         if(x&term[0])== term[1]:
             return 1-model[1]
-        else:
-            return model[1]
+    return model[1]
 
 # is size the number of terms?
 # or is size the sum of the number of literals in each term
@@ -97,7 +99,7 @@ def FindStrictExtStr(classification_instance, size, model, annotations, example)
                 e2= example
                 A2={'default':e2}
                 break
-        return [[[[],e1],A1],[[[],e2],A2]]
+        return [[[[],1],A1],[[[],0],A2]]
     extensions=[]
     if model[1] != classification_instance[1](example):
         ex2 = annotations['default']
@@ -114,9 +116,12 @@ def FindStrictExtStr(classification_instance, size, model, annotations, example)
             hmd>>=1
         return extensions
     #if multiple terms fuck us up how do we know that we chose the right one :(
-    for term in model[0]:
-        if (example&term[0]) == term[1]:
-            break
+    term=-1
+    for t in model[0]:
+        if (example&t[0]) == t[1]:
+            term=t
+    if term==-1:
+        print("poison")
     ex2 = annotations[term]
     hmd = (ex2^example)
     t=1
@@ -125,15 +130,20 @@ def FindStrictExtStr(classification_instance, size, model, annotations, example)
             nA = annotations.copy()
             tmodel=model.copy()
             bitmask=t|term[0]
-            for temp in tmodel[0]:
-                if temp == term:
-                    temp=(bitmask,ex2&bitmask)
+            for i in range(len(tmodel[0])):
+                if tmodel[0][i] == term:
+                    #temp=(bitmask,(ex2^example)&bitmask)
+                    #HOPE THIS IS RITGHT
+                    nA[(bitmask,term[1])] = nA[term]
+                    del nA[term]
+                    tmodel[0][i]=(bitmask,term[1])
             extensions.append([tmodel,nA])
         t<<=1
         hmd>>=1
     return extensions
         
 a = FindOptModelStr((ddata,clsf),7)
+print(a)
 
 for i in ddata:
      if cdata[i] != dsdata[i]:
