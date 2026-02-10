@@ -34,37 +34,32 @@ def clsf(x):
 #decision tree based classification function
 def tclsf(x):
     nodes=[
-        None,
-        None,
-        [0b1000,1,3],
-        [0b0100,4,0],
-        [0b0010,0,1],
+        [0b1000,1,2],
+        [1],
+        [0b0100,4,3],
+        [0],
+        [0b0010,5,6],
+        [0],
+        [1],
     ]
-    node=2
-    while node > 1:
+    node=0
+    while len(nodes[node]) >1:
         node= nodes[node][2] if x&(nodes[node][0]) else nodes[node][1]
-    return node
+    return nodes[node][0]
 
 def tclsfr(x):
     return (x,tclsf(x))
 
-def dtmtodsmterms(nodes,start=2,fm=0,v=0):
+def dtmtodsmterms(nodes,start=0,fm=0,v=0):
     cnode=nodes[start]
+    if cnode == [0]:
+        return [(fm,v,0)]
+    elif cnode == [1]:
+        return [(fm,v,1)]
     fm |= cnode[0]
     terms=[]
-    if cnode[1] == 0:
-        terms.append((fm,v,0))
-    elif cnode[1] == 1:
-        terms.append((fm,v,1))
-    else:
-        terms+= dtmtodsmterms(nodes,cnode[1],fm,v)
-    
-    if cnode[2] == 0:
-        terms.append((fm,v|cnode[0],0))
-    elif cnode[2] == 1:
-        terms.append((fm,v|cnode[0],1))
-    else:
-        terms+= dtmtodsmterms(nodes,cnode[2],fm,v|cnode[0])
+    terms+= dtmtodsmterms(nodes,cnode[1],fm,v)
+    terms+= dtmtodsmterms(nodes,cnode[2],fm,v|cnode[0])
     return terms
     
 def dtmtodsm(nodes):
@@ -186,11 +181,13 @@ def FindStrictExtStr(classification_instance, size, model, annotations, example)
 
 
 nodes=[
-        None,
-        None,
-        [0b1000,1,3],
-        [0b0100,4,0],
-        [0b0010,0,1],
+        [0b1000,1,2],
+        [1],
+        [0b0100,4,3],
+        [0],
+        [0b0010,5,6],
+        [0],
+        [1],
     ]
 sad=dtmtodsm(nodes)
 print(sad)
@@ -205,8 +202,8 @@ nodesr=[]
 nodesrule=[]
 annotation=[]
 
-a = FindOptModelStr((ddata,tclsf),7)
-print(a)
+#a = FindOptModelStr((ddata,tclsf),7)
+#print(a)
 a = FindOptModelStr((ddata,clsf),7)
 print(a)
 
