@@ -14,11 +14,11 @@ def classification_rule(x):
 
 #manual implementation of the decision set
 def dcset(x):
-    r=[(8,0),(14,10)]
-    for i in r:
+    r=[[(8,0),(14,10)],0]
+    for i in r[0]:
         if(x&i[0])== i[1]:
-            return (x,1)
-    return (x,0)
+            return (x,1-r[1])
+    return (x,r[1])
 
 #classification function based on decision list
 def clsf(x):
@@ -30,16 +30,54 @@ def clsf(x):
         return 1
     else:
         return 0
+    
+#decision tree based classification function
+def tclsf(x):
+    nodes=[
+        None,
+        None,
+        [0b1000,1,3],
+        [0b0100,4,0],
+        [0b0010,0,1],
+    ]
+    node=2
+    while node > 1:
+        node= nodes[node][2] if x&(nodes[node][0]) else nodes[node][1]
+    return node
 
-#def FindStrictExtStr(C,e):
-ddata=list(range(256))
-cdata=list(map(classification_rule, ddata))
-dsdata=list(map(dcset, ddata))
-nodes=[]
-nodesl=[]
-nodesr=[]
-nodesrule=[]
-annotation=[]
+def tclsfr(x):
+    return (x,tclsf(x))
+
+def dtmtodsmterms(nodes,start=2,fm=0,v=0):
+    cnode=nodes[start]
+    fm |= cnode[0]
+    terms=[]
+    if cnode[1] == 0:
+        terms.append((fm,v,0))
+    elif cnode[1] == 1:
+        terms.append((fm,v,1))
+    else:
+        terms+= dtmtodsmterms(nodes,cnode[1],fm,v)
+    
+    if cnode[2] == 0:
+        terms.append((fm,v|cnode[0],0))
+    elif cnode[2] == 1:
+        terms.append((fm,v|cnode[0],1))
+    else:
+        terms+= dtmtodsmterms(nodes,cnode[2],fm,v|cnode[0])
+    return terms
+    
+def dtmtodsm(nodes):
+    zm=[[],0]
+    om=[[],1]
+    terms = dtmtodsmterms(nodes)
+    #could prob use list comprehension
+    for i in terms:
+        if i[2]:
+            zm[0].append((i[0],i[1]))
+        else:
+            om[0].append((i[0],i[1]))
+    return (zm,om)
 
 def ApplyDecisionSet(x, model):
     for term in model[0]:
@@ -54,7 +92,21 @@ def ApplyDecisionSet(x, model):
 # the amnt of time spent checking features will be less than the jumps
 # might be an over fitting thing tho?
 def FindOptModelStr(classification_instance, size):
-    return FindOptExtStr(classification_instance, size)
+    for example in classification_instance[0]:
+        if classification_instance[1](example) == 1:
+            A1={'default':example}
+            break
+    
+    res = FindOptExtStr(classification_instance, size, [[],1], A1)
+    if res != None:
+        return res
+    
+    for example in classification_instance[0]:
+        if classification_instance[1](example) == 0:
+            A2={'default':example}
+            break
+
+    return FindOptExtStr(classification_instance, size,[[],0], A2)
 
 def FindOptExtStr(classification_instance, size, model=None, annotations=None):
     if model != None:
@@ -68,7 +120,7 @@ def FindOptExtStr(classification_instance, size, model=None, annotations=None):
         #two methods of size
         #if len(model[0])>=size:
         if sum(map(lambda a: a[0].bit_count(), model[0])) >= size:
-            print("death")
+            #print("death")
             return None
     else:
         example = None
@@ -87,19 +139,8 @@ def FindOptExtStr(classification_instance, size, model=None, annotations=None):
                  
 
 def FindStrictExtStr(classification_instance, size, model, annotations, example):
-    print("!")
-    if model == None and annotations == None:
-        for example in classification_instance[0]:
-            if classification_instance[1](example) == 1:
-                e1= example
-                A1={'default':e1}
-                break
-        for example in classification_instance[0]:
-            if classification_instance[1](example) == 0:
-                e2= example
-                A2={'default':e2}
-                break
-        return [[[[],1],A1],[[[],0],A2]]
+    #print("!")
+
     extensions=[]
     if model[1] != classification_instance[1](example):
         ex2 = annotations['default']
@@ -120,8 +161,8 @@ def FindStrictExtStr(classification_instance, size, model, annotations, example)
     for t in model[0]:
         if (example&t[0]) == t[1]:
             term=t
-    if term==-1:
-        print("poison")
+    #if term==-1:
+    #    print("poison")
     ex2 = annotations[term]
     hmd = (ex2^example)
     t=1
@@ -142,6 +183,30 @@ def FindStrictExtStr(classification_instance, size, model, annotations, example)
         hmd>>=1
     return extensions
         
+
+
+nodes=[
+        None,
+        None,
+        [0b1000,1,3],
+        [0b0100,4,0],
+        [0b0010,0,1],
+    ]
+sad=dtmtodsm(nodes)
+print(sad)
+
+#def FindStrictExtStr(C,e):
+ddata=list(range(256))
+cdata=list(map(classification_rule, ddata))
+dsdata=list(map(tclsfr, ddata))
+nodes=[]
+nodesl=[]
+nodesr=[]
+nodesrule=[]
+annotation=[]
+
+a = FindOptModelStr((ddata,tclsf),7)
+print(a)
 a = FindOptModelStr((ddata,clsf),7)
 print(a)
 
@@ -149,5 +214,3 @@ for i in ddata:
      if cdata[i] != dsdata[i]:
          print(i)
 
-
-         
