@@ -1,19 +1,48 @@
+from ucimlrepo import fetch_ucirepo
+import pandas as pd
+import numpy as np
+  
+# fetch dataset 
+mushroom = fetch_ucirepo(id=73) 
+  
+# data (as pandas dataframes) 
+
+X = mushroom.data.features 
+y = mushroom.data.targets 
+  
+# metadata 
+#print(mushroom.metadata) 
+  
+# variable information 
+#'print(mushroom.variables) 
+
+X_hot = (pd.get_dummies(X,dtype=int))
+y_hot = (pd.get_dummies(y))
+
+print(X_hot.columns)
+xhnpy = X_hot.to_numpy()
+yhnpy = y_hot.to_numpy().T[1]
+
+def npclsf(x):
+    lol=np.where(np.all(xhnpy == x,axis=1))[-1][-1]
+    return yhnpy[lol]
+
 def ApplyTree(x,nodes):
     node=0
     while len(nodes[node]) >1:
-        node= nodes[node][2] if x&(nodes[node][0]) else nodes[node][1]
-    return nodes[node][0]
+        node= nodes[node][1+x[nodes[node][0]]]
+    return bool(nodes[node][0])
 
 def TreePath(x,nodes):
     node=0
     path=[0]
     while len(nodes[node]) >1:
-        node= nodes[node][2] if x&(nodes[node][0]) else nodes[node][1]
+        node= nodes[node][1+x[nodes[node][0]]]
         path.append(node)
     return (nodes[node][0],node,path)
 
 def TreeSize(nodes,layer=0,pos=0):
-    return len(nodes)
+    #return len(nodes)
     if len(nodes[pos]) == 1:
         return layer+1
     else:
@@ -35,8 +64,8 @@ def CheckBeneathLayer(nodes, start, feature):
     return CheckBeneathLayer(nodes, nodes[start][1], feature) or CheckBeneathLayer(nodes, nodes[start][1], feature)
     
 def FindOptModelStr(classification_instance, size):
-    for example in classification_instance[0]:
-        if classification_instance[1](example) == 1:
+    for example,eout in classification_instance:
+        if eout:
             model=[[1]]
             A1=[example]
             break
@@ -45,8 +74,8 @@ def FindOptModelStr(classification_instance, size):
     if res != None:
         return res
     
-    for example in classification_instance[0]:
-        if classification_instance[1](example) == 0:
+    for example,eout in classification_instance:
+        if not eout:
             model=[[0]]
             A2=[example]
             break
@@ -55,8 +84,8 @@ def FindOptModelStr(classification_instance, size):
 
 def FindOptExtStr(classification_instance, size, model=None, annotations=None):
     model_pass=True
-    for example in classification_instance[0]:
-        if ApplyTree(example, model) != classification_instance[1](example):
+    for example, result in classification_instance:
+        if ApplyTree(example, model) != result:
             model_pass=False
             break
     if model_pass:
@@ -66,7 +95,7 @@ def FindOptExtStr(classification_instance, size, model=None, annotations=None):
     if TreeSize(model) >= size:
         #print("death")
         return None
-    strict_exts = FindStrictExtStr(classification_instance, size, model, annotations, example)
+    strict_exts = FindStrictExtStr(model, annotations, example)
     B = None
     for nModel, nAnnotations in strict_exts:
         if TreeSize(nModel) <= size:
@@ -76,18 +105,17 @@ def FindOptExtStr(classification_instance, size, model=None, annotations=None):
                     B=A
     return B     
 
-def FindStrictExtStr(classification_instance, size, model, annotations, example):
+def FindStrictExtStr(model, annotations, example):
     #print("!")
     extensions=[]
     lv,ln,lpath=TreePath(example,model)
     CAv= annotations[ln]
     hmd=(example^CAv)
-    t=1
     cur_checks=[model[x][0] for x in lpath[:-1]]
-    while hmd >0:
-            if (hmd%2 == 1):
-                for node in lpath:
-                    if not CheckBeneathLayer(model,node,t):
+    for findex, feature in enumerate(hmd):
+        if feature:
+            for node in lpath:
+                    if not CheckBeneathLayer(model,node,findex):
                         tmodel=model.copy()
                         nA = annotations.copy()
                         nc=len(model)
@@ -95,53 +123,8 @@ def FindStrictExtStr(classification_instance, size, model, annotations, example)
                         nA.append(CAv)
                         tmodel.append([1-lv])
                         nA.append(example)
-                        if (example & t):
-                            tmodel[node]=[t,nc,nc+1]
-                        else:
-                            tmodel[node]=[t,nc+1,nc]
+                        tmodel[node]=[findex,nc+1-example[findex],nc+example[findex]]
                         extensions.append([tmodel,nA])
-            t<<=1
-            hmd>>=1
-            '''
-    if model[1] != classification_instance[1](example):
-        ex2 = annotations['default']
-        hmd = (ex2^example)
-        t=1
-        while hmd >0:
-            if (hmd%2 == 1):
-                nA = annotations.copy()
-                nA[(t,example&t)]=example
-                tmodel=model.copy()
-                tmodel[0].append((t,example&t))
-                extensions.append([tmodel,nA])
-            t<<=1
-            hmd>>=1
-        return extensions
-    #if multiple terms fuck us up how do we know that we chose the right one :(
-    term=-1
-    for t in model[0]:
-        if (example&t[0]) == t[1]:
-            term=t
-    #if term==-1:
-    #    print("poison")
-    ex2 = annotations[term]
-    hmd = (ex2^example)
-    t=1
-    while hmd >0:
-        if (hmd%2 == 1):
-            nA = annotations.copy()
-            tmodel=model.copy()
-            bitmask=t|term[0]
-            for i in range(len(tmodel[0])):
-                if tmodel[0][i] == term:
-                    #temp=(bitmask,(ex2^example)&bitmask)
-                    #HOPE THIS IS RITGHT
-                    nA[(bitmask,term[1])] = nA[term]
-                    del nA[term]
-                    tmodel[0][i]=(bitmask,term[1])
-            extensions.append([tmodel,nA])
-        t<<=1
-        hmd>>=1'''
     return extensions
 
 ddata=list(range(256))
@@ -156,6 +139,8 @@ def clsf(x):
         return 1
     else:
         return 0
+    
+
 
 def dtmtodsmterms(nodes,start=0,fm=0,v=0):
     cnode=nodes[start]
@@ -179,10 +164,11 @@ def dtmtodsm(nodes):
             om[0].append((i[0],i[1]))
     return (zm,om)
     
-a = FindOptModelStr((ddata,clsf),7)
+a = FindOptModelStr(list(zip(xhnpy,yhnpy)),10)
 
 
 print(a)
-if a != None:
-    print(dtmtodsm(a))
+print(X_hot.columns[19])
+#if a != None:
+#    print(dtmtodsm(a))
 
