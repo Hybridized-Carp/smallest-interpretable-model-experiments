@@ -1,31 +1,10 @@
 from ucimlrepo import fetch_ucirepo
 import pandas as pd
 import numpy as np
-  
-# fetch dataset 
-mushroom = fetch_ucirepo(id=73) 
-  
-# data (as pandas dataframes) 
 
-X = mushroom.data.features 
-y = mushroom.data.targets 
-  
-# metadata 
-#print(mushroom.metadata) 
-  
-# variable information 
-#'print(mushroom.variables) 
-
-X_hot = (pd.get_dummies(X,dtype=int))
-y_hot = (pd.get_dummies(y))
-
-print(X_hot.columns)
-xhnpy = X_hot.to_numpy()
-yhnpy = y_hot.to_numpy().T[1]
-
-def npclsf(x):
-    lol=np.where(np.all(xhnpy == x,axis=1))[-1][-1]
-    return yhnpy[lol]
+#def npclsf(x):
+#    lol=np.where(np.all(xhnpy == x,axis=1))[-1][-1]
+#    return yhnpy[lol]
 
 def ApplyTree(x,nodes):
     node=0
@@ -64,23 +43,24 @@ def CheckBeneathLayer(nodes, start, feature):
     return CheckBeneathLayer(nodes, nodes[start][1], feature) or CheckBeneathLayer(nodes, nodes[start][1], feature)
     
 def FindOptModelStr(classification_instance, size):
+    initial_ma_pairs =[]
+
     for example,eout in classification_instance:
         if eout:
-            model=[[1]]
-            A1=[example]
+            initial_ma_pairs.append(([[1]],[example]))
             break
-    
-    res = FindOptExtStr(classification_instance, size, model, A1)
-    if res != None:
-        return res
     
     for example,eout in classification_instance:
         if not eout:
-            model=[[0]]
-            A2=[example]
+            initial_ma_pairs.append(([[0]],[example]))
             break
 
-    return FindOptExtStr(classification_instance, size,model, A2)
+    for model, annotations in initial_ma_pairs:
+        res = FindOptExtStr(classification_instance, size, model, annotations)
+        if res != None:
+            return res
+    
+    return None
 
 def FindOptExtStr(classification_instance, size, model=None, annotations=None):
     model_pass=True
@@ -139,8 +119,6 @@ def clsf(x):
         return 1
     else:
         return 0
-    
-
 
 def dtmtodsmterms(nodes,start=0,fm=0,v=0):
     cnode=nodes[start]
@@ -163,9 +141,35 @@ def dtmtodsm(nodes):
         else:
             om[0].append((i[0],i[1]))
     return (zm,om)
-    
-a = FindOptModelStr(list(zip(xhnpy,yhnpy)),10)
 
+# fetch dataset 
+mushroom = fetch_ucirepo(id=73) 
+  
+# data (as pandas dataframes) 
+
+X = mushroom.data.features 
+y = mushroom.data.targets 
+  
+# metadata 
+#print(mushroom.metadata) 
+  
+# variable information 
+#'print(mushroom.variables) 
+
+X_hot = (pd.get_dummies(X,dtype=int))
+y_hot = (pd.get_dummies(y))
+ 
+print(X_hot.columns)
+xhnpy = X_hot.to_numpy()
+yhnpy = y_hot.to_numpy().T[1]
+print(xhnpy)
+
+tdata=np.arange(256,dtype=np.uint8)
+tout=list(map(clsf, tdata))
+tdata=np.unpackbits(tdata.reshape(1,256).T,axis=1)
+print(tdata)
+#a = FindOptModelStr(list(zip(xhnpy,yhnpy)),5)
+a = FindOptModelStr(list(zip(tdata,tout)),4)
 
 print(a)
 print(X_hot.columns[19])
