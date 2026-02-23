@@ -1,27 +1,36 @@
 from ucimlrepo import fetch_ucirepo
 import pandas as pd
 import numpy as np
+import numba as nb
 
 #def npclsf(x):
 #    lol=np.where(np.all(xhnpy == x,axis=1))[-1][-1]
 #    return yhnpy[lol]
 
+@nb.njit(['(bool_[:],int16[:,:])',
+          '(uint8[:],int16[:,:])',
+          '(uint8[:],int64[:,:])'])
 def ApplyTree(x,nodes):
     node=0
-    while len(nodes[node]) >1:
+    while nodes[node][0] != -1:
         node= nodes[node][1+x[nodes[node][0]]]
-    return bool(nodes[node][0])
+    return nodes[node][1]
+
+
+def BakeTree(nodes,features,size):
+    bt=[]
+    stack=[]
 
 def TreePath(x,nodes):
     node=0
     path=[0]
-    while len(nodes[node]) >1:
+    while nodes[node][0] != -1:
         node= nodes[node][1+x[nodes[node][0]]]
         path.append(node)
-    return (nodes[node][0],node,path)
+    return (nodes[node][1],node,path)
 
 def TreeSize(nodes,layer=0,pos=0):
-    #return len(nodes)
+    return len(nodes)
     if len(nodes[pos]) == 1:
         return layer+1
     else:
@@ -31,29 +40,54 @@ def TreeSize(nodes,layer=0,pos=0):
         )
     
 def FindChecks(nodes, start=0):
-    if len(nodes[start]) ==1:
+    if nodes[start][0] == -1:
         return []
     return [nodes[start][0]] + FindChecks(nodes, nodes[start][1]) + FindChecks(nodes, nodes[start][2])
 
 def CheckBeneathLayer(nodes, start, feature):
-    if len(nodes[start]) ==1:
+    if nodes[start][0] == -1:
         return False
     if nodes[start][0]==feature:
         return True
     return CheckBeneathLayer(nodes, nodes[start][1], feature) or CheckBeneathLayer(nodes, nodes[start][1], feature)
+
+def CheckPath(nodes, path, feature):
+    for i in path:
+        if nodes[i][0]==feature:
+            return True
+    return False
     
 def FindOptModelStr(classification_instance, size):
     initial_ma_pairs =[]
 
-    for example,eout in classification_instance:
-        if eout:
-            initial_ma_pairs.append(([[1]],[example]))
-            break
+    nfeatures=len(classification_instance[0][0])
+    for i in range(nfeatures):
+        #feature 0 mapping
+        zi = -1
+        oi = -1
+        annotations = [0]
+        for example, eout in classification_instance:
+            if not example[i]:
+                zi = eout
+                annotations.append(example)
+                break
+        for example, eout in classification_instance:
+            if example[i]:
+                oi = eout
+                annotations.append(example)
+                break
+        if (zi != -1) and (oi != -1):
+            initial_ma_pairs.append(([[i, 1,2], [-1,zi,zi],[-1,oi,oi]],annotations))
+
+    #for example,eout in classification_instance:
+    #    if eout:
+    #        initial_ma_pairs.append(([[1]],[example]))
+    #        break
     
-    for example,eout in classification_instance:
-        if not eout:
-            initial_ma_pairs.append(([[0]],[example]))
-            break
+    #for example,eout in classification_instance:
+    #    if not eout:
+    #        initial_ma_pairs.append(([[0]],[example]))
+    #        break
 
     for model, annotations in initial_ma_pairs:
         res = FindOptExtStr(classification_instance, size, model, annotations)
@@ -63,9 +97,9 @@ def FindOptModelStr(classification_instance, size):
     return None
 
 def FindOptExtStr(classification_instance, size, model=None, annotations=None):
-    model_pass=True
+    model_pass=True 
     for example, result in classification_instance:
-        if ApplyTree(example, model) != result:
+        if ApplyTree(example, np.array(model,dtype=np.int16)) != result:
             model_pass=False
             break
     if model_pass:
@@ -94,17 +128,17 @@ def FindStrictExtStr(model, annotations, example):
     cur_checks=[model[x][0] for x in lpath[:-1]]
     for findex, feature in enumerate(hmd):
         if feature:
-            for node in lpath:
-                    if not CheckBeneathLayer(model,node,findex):
-                        tmodel=model.copy()
-                        nA = annotations.copy()
-                        nc=len(model)
-                        tmodel.append(tmodel[node])
-                        nA.append(CAv)
-                        tmodel.append([1-lv])
-                        nA.append(example)
-                        tmodel[node]=[findex,nc+1-example[findex],nc+example[findex]]
-                        extensions.append([tmodel,nA])
+            if not CheckPath(model,lpath, findex):
+                tmodel=model.copy()
+                nA = annotations.copy()
+                nc=len(model)
+                tmodel.append(tmodel[ln])
+                nA.append(CAv)
+                tmodel.append([-1,1-lv,1-lv])
+                nA.append(example)
+                tmodel[ln]=[findex,nc+1-example[findex],nc+example[findex]]
+                extensions.append([tmodel,nA])
+                        
     return extensions
 
 ddata=list(range(256))
@@ -156,7 +190,7 @@ y = mushroom.data.targets
 # variable information 
 #'print(mushroom.variables) 
 
-X_hot = (pd.get_dummies(X,dtype=int))
+X_hot = (pd.get_dummies(X))
 y_hot = (pd.get_dummies(y))
  
 print(X_hot.columns)
@@ -168,8 +202,8 @@ tdata=np.arange(256,dtype=np.uint8)
 tout=list(map(clsf, tdata))
 tdata=np.unpackbits(tdata.reshape(1,256).T,axis=1)
 print(tdata)
-#a = FindOptModelStr(list(zip(xhnpy,yhnpy)),5)
-a = FindOptModelStr(list(zip(tdata,tout)),4)
+a = FindOptModelStr(list(zip(xhnpy,yhnpy)),2**4)
+#a = FindOptModelStr(list(zip(tdata,tout)),7)
 
 print(a)
 print(X_hot.columns[19])
