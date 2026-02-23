@@ -1,4 +1,4 @@
-from ucimlrepo import fetch_ucirepo
+#from ucimlrepo import fetch_ucirepo
 import pandas as pd
 import numpy as np
 import numba as nb
@@ -21,6 +21,9 @@ def BakeTree(nodes,features,size):
     bt=[]
     stack=[]
 
+@nb.njit(['(bool_[:],int16[:,:])',
+          '(uint8[:],int16[:,:])',
+          '(uint8[:],int64[:,:])'])
 def TreePath(x,nodes):
     node=0
     path=[0]
@@ -96,7 +99,7 @@ def FindOptModelStr(classification_instance, size):
     
     return None
 
-def FindOptExtStr(classification_instance, size, model=None, annotations=None):
+def FindOptExtStr(classification_instance, size, model, annotations):
     model_pass=True 
     for example, result in classification_instance:
         if ApplyTree(example, np.array(model,dtype=np.int16)) != result:
@@ -112,7 +115,7 @@ def FindOptExtStr(classification_instance, size, model=None, annotations=None):
     strict_exts = FindStrictExtStr(model, annotations, example)
     B = None
     for nModel, nAnnotations in strict_exts:
-        if TreeSize(nModel) <= size:
+        if len(nModel) <= size:
             A = FindOptExtStr(classification_instance, size, nModel, nAnnotations)
             if A != None:
                 if B == None or TreeSize(B) > TreeSize(A):
@@ -122,7 +125,7 @@ def FindOptExtStr(classification_instance, size, model=None, annotations=None):
 def FindStrictExtStr(model, annotations, example):
     #print("!")
     extensions=[]
-    lv,ln,lpath=TreePath(example,model)
+    lv,ln,lpath=TreePath(example,np.array(model,dtype=np.int16))
     CAv= annotations[ln]
     hmd=(example^CAv)
     cur_checks=[model[x][0] for x in lpath[:-1]]
@@ -176,37 +179,37 @@ def dtmtodsm(nodes):
             om[0].append((i[0],i[1]))
     return (zm,om)
 
-# fetch dataset 
-mushroom = fetch_ucirepo(id=73) 
-  
-# data (as pandas dataframes) 
+if (False):
+    # fetch dataset 
+    mushroom = fetch_ucirepo(id=73) 
+    
+    # data (as pandas dataframes) 
+    X = mushroom.data.features 
+    y = mushroom.data.targets 
+    
+    # metadata 
+    #print(mushroom.metadata) 
+    
+    # variable information 
+    #'print(mushroom.variables) 
 
-X = mushroom.data.features 
-y = mushroom.data.targets 
-  
-# metadata 
-#print(mushroom.metadata) 
-  
-# variable information 
-#'print(mushroom.variables) 
-
-X_hot = (pd.get_dummies(X))
-y_hot = (pd.get_dummies(y))
- 
-print(X_hot.columns)
-xhnpy = X_hot.to_numpy()
-yhnpy = y_hot.to_numpy().T[1]
-print(xhnpy)
+    X_hot = (pd.get_dummies(X))
+    y_hot = (pd.get_dummies(y))
+    
+    print(X_hot.columns)
+    xhnpy = X_hot.to_numpy()
+    yhnpy = y_hot.to_numpy().T[1]
+    print(xhnpy)
 
 tdata=np.arange(256,dtype=np.uint8)
 tout=list(map(clsf, tdata))
 tdata=np.unpackbits(tdata.reshape(1,256).T,axis=1)
 print(tdata)
-a = FindOptModelStr(list(zip(xhnpy,yhnpy)),2**4)
-#a = FindOptModelStr(list(zip(tdata,tout)),7)
+#a = FindOptModelStr(list(zip(xhnpy,yhnpy)),2**4)
+a = FindOptModelStr(list(zip(tdata,tout)),7)
 
 print(a)
-print(X_hot.columns[19])
+#print(X_hot.columns[19])
 #if a != None:
 #    print(dtmtodsm(a))
 
