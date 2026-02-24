@@ -1,4 +1,4 @@
-#from ucimlrepo import fetch_ucirepo
+from ucimlrepo import fetch_ucirepo
 import pandas as pd
 import numpy as np
 import numba as nb
@@ -7,30 +7,32 @@ import numba as nb
 #    lol=np.where(np.all(xhnpy == x,axis=1))[-1][-1]
 #    return yhnpy[lol]
 
-@nb.njit(['(bool_[:],int16[:,:])',
-          '(uint8[:],int16[:,:])',
-          '(uint8[:],int64[:,:])'])
-def ApplyTree(x,nodes):
+@nb.njit(['bool_(int8[:,:],bool_[:])',
+          'bool_(int16[:,:],bool_[:])',
+          'bool_(int16[:,:],uint8[:])',
+          'bool_(int64[:,:],uint8[:])'])
+def ApplyTree(nodes: np.ndarray,example: np.ndarray):
     node=0
     while nodes[node][0] != -1:
-        node= nodes[node][1+x[nodes[node][0]]]
+        node= nodes[node][1+example[nodes[node][0]]]
     return nodes[node][1]
 
 
 def BakeTree(nodes,features,size):
     bt=[]
     stack=[]
-
-@nb.njit(['(bool_[:],int16[:,:])',
-          '(uint8[:],int16[:,:])',
-          '(uint8[:],int64[:,:])'])
-def TreePath(x,nodes):
+@nb.njit(['int8[:,:],bool_[:]',
+          'int16[:,:],bool_[:]',
+          'int32[:,:],bool_[:]',
+          'int16[:,:],uint8[:]',
+          'int64[:,:],uint8[:]'])
+def TreePath(nodes: np.ndarray,example: np.ndarray):
     node=0
     path=[0]
     while nodes[node][0] != -1:
-        node= nodes[node][1+x[nodes[node][0]]]
+        node= nodes[node][1+example[nodes[node][0]]]
         path.append(node)
-    return (nodes[node][1],node,path)
+    return (nodes[node][1],node,np.array(path))
 
 def TreeSize(nodes,layer=0,pos=0):
     return len(nodes)
@@ -59,29 +61,38 @@ def CheckPath(nodes, path, feature):
         if nodes[i][0]==feature:
             return True
     return False
-    
-def FindOptModelStr(classification_instance, size):
-    initial_ma_pairs =[]
 
+
+def FindOptModelStr(classification_instance, msize):
+    print("finding opt model")
+    initial_ma_pairs = []
     nfeatures=len(classification_instance[0][0])
+    if nfeatures <= 127:
+        array_dtype= np.int8
+    elif nfeatures <= (2**15)-1:
+        array_dtype= np.int16
+    else:
+        array_dtype=np.int32
+    example_dtype=classification_instance[0][0].dtype
     for i in range(nfeatures):
-        #feature 0 mapping
-        zi = -1
-        oi = -1
-        annotations = [0]
-        for example, eout in classification_instance:
-            if not example[i]:
-                zi = eout
-                annotations.append(example)
+        #nested loops to avoid any unneccessary checking
+        for example1, eout1 in classification_instance:
+            if not example1[i]:
+                zi = eout1
+                for example2, eout2 in classification_instance:
+                    if example2[i]:
+                        initial_model = np.full((msize,3),fill_value=-2,dtype=array_dtype)
+                        initial_annotations = np.empty((msize,nfeatures),dtype=example_dtype)
+                        initial_model[0] = [i,1,2]
+                        initial_annotations[0] = example1
+                        initial_model[1] = [-1,eout1,eout1]
+                        initial_annotations[1] = example1
+                        initial_model[2] = [-1,eout2,eout2]
+                        initial_annotations[2] = example2
+                        initial_ma_pairs.append((initial_model, initial_annotations))
+                        break
                 break
-        for example, eout in classification_instance:
-            if example[i]:
-                oi = eout
-                annotations.append(example)
-                break
-        if (zi != -1) and (oi != -1):
-            initial_ma_pairs.append(([[i, 1,2], [-1,zi,zi],[-1,oi,oi]],annotations))
-
+    
     #for example,eout in classification_instance:
     #    if eout:
     #        initial_ma_pairs.append(([[1]],[example]))
@@ -93,54 +104,59 @@ def FindOptModelStr(classification_instance, size):
     #        break
 
     for model, annotations in initial_ma_pairs:
-        res = FindOptExtStr(classification_instance, size, model, annotations)
-        if res != None:
+        res = FindOptExtStr(classification_instance, msize, 3, model, annotations)
+        if res is not None:
             return res
     
     return None
 
-def FindOptExtStr(classification_instance, size, model, annotations):
+@nb.jit
+def FindOptExtStr(classification_instance, msize, csize, model: np.ndarray, annotations: np.ndarray):
+    print(csize)
     model_pass=True 
     for example, result in classification_instance:
-        if ApplyTree(example, np.array(model,dtype=np.int16)) != result:
+        if ApplyTree(model,example) != result:
             model_pass=False
             break
     if model_pass:
         return model
-    #two methods of size
-    #if len(model[0])>=size:
-    if TreeSize(model) >= size:
-        #print("death")
+    
+    if model[-2][0] !=-2:
         return None
+    
     strict_exts = FindStrictExtStr(model, annotations, example)
     B = None
     for nModel, nAnnotations in strict_exts:
-        if len(nModel) <= size:
-            A = FindOptExtStr(classification_instance, size, nModel, nAnnotations)
-            if A != None:
-                if B == None or TreeSize(B) > TreeSize(A):
-                    B=A
+        A = FindOptExtStr(classification_instance, msize, csize+1, nModel, nAnnotations)
+        if A is not None:
+            if (B is None) or (np.argmax(B[:,0]==-2) > np.argmax(A[:,0]==-2)):
+                B=A
     return B     
 
-def FindStrictExtStr(model, annotations, example):
-    #print("!")
+@nb.njit(['int8[:,:],bool_[:,:],bool_[:]',
+          'int16[:,:],bool_[:,:],bool_[:]',
+          'int32[:,:],bool_[:,:],bool_[:]',
+          'int16[:,:],uint8[:,:],uint8[:]',
+          'int64[:,:],uint8[:,:],uint8[:]'])
+def FindStrictExtStr(model: np.ndarray, annotations: np.ndarray, example: np.ndarray):
     extensions=[]
-    lv,ln,lpath=TreePath(example,np.array(model,dtype=np.int16))
+    lv, ln, lpath=TreePath(model,example)
     CAv= annotations[ln]
     hmd=(example^CAv)
     cur_checks=[model[x][0] for x in lpath[:-1]]
     for findex, feature in enumerate(hmd):
         if feature:
-            if not CheckPath(model,lpath, findex):
-                tmodel=model.copy()
-                nA = annotations.copy()
-                nc=len(model)
-                tmodel.append(tmodel[ln])
-                nA.append(CAv)
-                tmodel.append([-1,1-lv,1-lv])
-                nA.append(example)
-                tmodel[ln]=[findex,nc+1-example[findex],nc+example[findex]]
-                extensions.append([tmodel,nA])
+            if not feature in model[:,0][lpath]:
+                nModel=model.copy()
+                nAnnotations=annotations.copy()
+                nc=np.argmax(model[:,0]==-2)
+                nModel[nc]=(nModel[ln])
+                nAnnotations[nc]=(annotations[ln])
+                nModel[nc+1]=([-1,1-lv,1-lv])
+                nAnnotations[nc+1]=example
+                nModel[ln]=[findex,nc+1-example[findex],nc+example[findex]]
+                nAnnotations[ln]=example
+                extensions.append((nModel,nAnnotations))
                         
     return extensions
 
@@ -179,7 +195,8 @@ def dtmtodsm(nodes):
             om[0].append((i[0],i[1]))
     return (zm,om)
 
-if (False):
+rt = True
+if (rt):
     # fetch dataset 
     mushroom = fetch_ucirepo(id=73) 
     
@@ -196,17 +213,17 @@ if (False):
     X_hot = (pd.get_dummies(X))
     y_hot = (pd.get_dummies(y))
     
-    print(X_hot.columns)
+    #print(X_hot.columns)
     xhnpy = X_hot.to_numpy()
     yhnpy = y_hot.to_numpy().T[1]
-    print(xhnpy)
-
-tdata=np.arange(256,dtype=np.uint8)
-tout=list(map(clsf, tdata))
-tdata=np.unpackbits(tdata.reshape(1,256).T,axis=1)
-print(tdata)
-#a = FindOptModelStr(list(zip(xhnpy,yhnpy)),2**4)
-a = FindOptModelStr(list(zip(tdata,tout)),7)
+    #print(xhnpy)
+    a = FindOptModelStr(list(zip(xhnpy,yhnpy)),2**4)
+else:
+    tdata=np.arange(256,dtype=np.uint8)
+    tout=list(map(clsf, tdata))
+    tdata=np.unpackbits(tdata.reshape(1,256).T,axis=1).astype(np.bool_)
+    print(tdata)
+    a = FindOptModelStr(list(zip(tdata,tout)),7)
 
 print(a)
 #print(X_hot.columns[19])
