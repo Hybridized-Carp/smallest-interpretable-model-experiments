@@ -18,19 +18,20 @@ using namespace std;
 
 using json = nlohmann::json;
 
+//this is kinda arbitrary because I could invent arbitrary coding schemes
+enum binaryEncoding{
+    OneHot = 1,
+    Label = 2,
+    Ordinal = 3,
+    Unary = 4
+};
+
 namespace parser {
-    //this is kinda arbitrary because I could invent arbitrary coding schemes
-    enum encoding {
-        OneHot = 1,
-        Label = 2,
-        Ordinal=3,
-        Unary=4
-    };
     struct feature {
         string name;
         bool target;
         map<string,uint8_t> symbols;
-        encoding encodingType;
+        binaryEncoding encodingType;
     };
 
     void to_json(json& j, const feature& f) {
@@ -54,20 +55,25 @@ namespace dsm {
         vector<literal> literals;
         bool defaultValue;
     };
+
+    size_t modelSize(model model) {
+        size_t size = 0;
+        for (literal literal : model.literals)
+            size += literal.terms.size();
+        return size;
+    }
+
+    model FindOptModelStr(vector<binaryClassificationInstance::datapoint> examples, size_t size) {
+        
+    }
 }
 
 namespace classificationInstance {
-    enum encoding {
-        OneHot = 1,
-        Label = 2,
-        Ordinal = 3,
-        Unary = 4
-    };
     struct feature {
         string name;
         uint8_t value;
         uint8_t size;
-        encoding encodingType;
+        binaryEncoding encodingType;
     };
     struct datapoint {
         vector<feature> data;
@@ -87,18 +93,18 @@ namespace binaryClassificationInstance {
             vector<bool> data;
             for (classificationInstance::feature feature: orgdatapoint.data)
                     switch (feature.encodingType) {
-                    case (parser::encoding::OneHot):
+                    case (binaryEncoding::OneHot):
                         for (int j = 0; j < feature.size; j++)
                             data.push_back(feature.value == j);
                         break;
-                    case (parser::encoding::Label):
+                    case (binaryEncoding::Label):
                         for (int j = 1; j < feature.size; j++)
                             data.push_back(feature.value == j);
                         break;
-                    case (parser::encoding::Ordinal):
+                    case (binaryEncoding::Ordinal):
                         //can't be fucked rn
                         break;
-                    case(parser::encoding::Unary):
+                    case(binaryEncoding::Unary):
                         for (int j = 1; j < feature.size; j++)
                             data.push_back(feature.value >= j);
                         break;
@@ -106,6 +112,7 @@ namespace binaryClassificationInstance {
             
             bdatapoints.push_back({ data, orgdatapoint.result});
         }
+        return bdatapoints;
     }
 }
 
@@ -186,7 +193,7 @@ int main()
                     "unknown",
                     false,
                     symbols,
-                    unique_items.size() != 2 ? parser::encoding::OneHot : parser::encoding::Label
+                    unique_items.size() != 2 ? binaryEncoding::OneHot : binaryEncoding::Label
                 )
             );
         }
@@ -227,21 +234,22 @@ int main()
         cout << "Please set a target feature and then rerun the program";
         return -6;
     }
-    /*
+    
+    //bit of testing code
     int numbits = 0;
     for (parser::feature feature : features)
     {
         if (feature.target)
             continue;
         switch (feature.encodingType) {
-            case (parser::encoding::OneHot):
+            case (binaryEncoding::OneHot):
                 numbits += feature.symbols.size();
                 break;
-            case (parser::encoding::Label):
-            case (parser::encoding::Unary):
+            case (binaryEncoding::Label):
+            case (binaryEncoding::Unary):
                 numbits += feature.symbols.size() - 1;
                 break;
-            case (parser::encoding::Ordinal):
+            case (binaryEncoding::Ordinal):
                 uint8_t size = feature.symbols.size();
                 int bits = 0;
                 while (size >>= 1)
@@ -250,38 +258,24 @@ int main()
                 break;
         }
         
-    }*/
+    }
 
     cout << "applying feature maps to rows to create boolean vectors" << endl;
-    vector<class> datapoints;
+    vector<classificationInstance::datapoint> datapoints;
     for (vector<string> row : rows) {
-        classifierinstance::datapoint datapoint;
+        classificationInstance::datapoint datapoint;
         for (int i = 0; i < row.size(); i++) {
             parser::feature feature = features[i];
-            if (!feature.target){
-                switch (feature.encodingType) {
-                case (parser::encoding::OneHot):
-                    for (int j = 0; j < feature.symbols.size(); j++)
-                        datapoint.data.push_back(feature.symbols[row[j]] == j);
-                    break;
-                case (parser::encoding::Label):
-                    for (int j = 1; j < feature.symbols.size(); j++)
-                        datapoint.data.push_back(feature.symbols[row[j]] == j);
-                    break;
-                case (parser::encoding::Ordinal):
-                    //can't be fucked rn
-                    break;
-                case(parser::encoding::Unary):
-                    for (int j = 1; j < feature.symbols.size(); j++)
-                        datapoint.data.push_back(feature.symbols[row[j]] >= j);
-                    break;
-                }
-            } else {
+            if (feature.target)
                 datapoint.result = (bool)feature.symbols[row[i]];
+            else {
+                classificationInstance::feature clfeature{ feature.name, feature.symbols[row[i]], feature.symbols.size(), feature.encodingType };
+                datapoint.data.push_back(clfeature);
             }
         }
         datapoints.push_back(datapoint);
     }
+    vector<binaryClassificationInstance::datapoint> bdatapoints = binaryClassificationInstance::to_binaryClassificationInstance(datapoints);
 	cout << "Hello CMake." << endl;
 	return 0;
 }
