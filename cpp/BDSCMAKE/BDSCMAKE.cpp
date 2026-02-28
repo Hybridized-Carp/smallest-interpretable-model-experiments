@@ -29,7 +29,7 @@ namespace parser {
     struct feature {
         string name;
         bool target;
-        map<string,int> symbols;
+        map<string,uint8_t> symbols;
         encoding encodingType;
     };
 
@@ -46,14 +46,67 @@ namespace parser {
 }
 
 namespace dsm {
-    struct model {
-        vector<literal> literals;
-        bool defaultValue;
-    };
     struct literal {
         vector<bool> terms;
         vector<bool> annotation;
     };
+    struct model {
+        vector<literal> literals;
+        bool defaultValue;
+    };
+}
+
+namespace classificationInstance {
+    enum encoding {
+        OneHot = 1,
+        Label = 2,
+        Ordinal = 3,
+        Unary = 4
+    };
+    struct feature {
+        string name;
+        uint8_t value;
+        uint8_t size;
+        encoding encodingType;
+    };
+    struct datapoint {
+        vector<feature> data;
+        bool result;
+    };
+}
+
+namespace binaryClassificationInstance {
+    struct datapoint {
+        vector<bool> data;
+        bool result;
+    };
+
+    vector<datapoint> to_binaryClassificationInstance(vector<classificationInstance::datapoint> datapoints) {
+        vector<datapoint> bdatapoints;
+        for (classificationInstance::datapoint orgdatapoint: datapoints) {
+            vector<bool> data;
+            for (classificationInstance::feature feature: orgdatapoint.data)
+                    switch (feature.encodingType) {
+                    case (parser::encoding::OneHot):
+                        for (int j = 0; j < feature.size; j++)
+                            data.push_back(feature.value == j);
+                        break;
+                    case (parser::encoding::Label):
+                        for (int j = 1; j < feature.size; j++)
+                            data.push_back(feature.value == j);
+                        break;
+                    case (parser::encoding::Ordinal):
+                        //can't be fucked rn
+                        break;
+                    case(parser::encoding::Unary):
+                        for (int j = 1; j < feature.size; j++)
+                            data.push_back(feature.value >= j);
+                        break;
+                    }
+            
+            bdatapoints.push_back({ data, orgdatapoint.result});
+        }
+    }
 }
 
 int main()
@@ -122,8 +175,8 @@ int main()
         for (set<string> unique_items : unique_items_in_column) {
             //use category toggle if we only have one item
             //might be incorrect but oh well
-            int fi = 0;
-            map<string, int> symbols;
+            uint8_t fi = 0;
+            map<string, uint8_t> symbols;
             for (string unique_item : unique_items) {
                 symbols.insert({ unique_item, fi });
                 fi++;
@@ -133,7 +186,7 @@ int main()
                     "unknown",
                     false,
                     symbols,
-                    unique_items.size() == 2 ? parser::encoding::Label : parser::encoding::OneHot
+                    unique_items.size() != 2 ? parser::encoding::OneHot : parser::encoding::Label
                 )
             );
         }
@@ -163,7 +216,7 @@ int main()
     int targetFeatureIndex = -1;
     for (int i = 0; i < features.size(); i++)
     {
-        if (features[i].target && targetFeatureIndex ==-1 && features[i].symbols.size() != 2) {
+        if (features[i].target && targetFeatureIndex ==-1 && features[i].symbols.size() == 2) {
             targetFeatureIndex = i;
         } else if (features[i].target) {
             cout << "Too many target features found or target feature has more than 2 symbols";
@@ -174,6 +227,7 @@ int main()
         cout << "Please set a target feature and then rerun the program";
         return -6;
     }
+    /*
     int numbits = 0;
     for (parser::feature feature : features)
     {
@@ -196,26 +250,38 @@ int main()
                 break;
         }
         
-    }
-    /*cout << "applying feature maps to rows to create boolean vectors" << endl;
-    vector<vector<bool>> datapoints;
+    }*/
+
+    cout << "applying feature maps to rows to create boolean vectors" << endl;
+    vector<class> datapoints;
     for (vector<string> row : rows) {
-        vector<bool> datapoint;
+        classifierinstance::datapoint datapoint;
         for (int i = 0; i < row.size(); i++) {
             parser::feature feature = features[i];
-            map<string, int> categorymap = features[i].symbols;
-            string feature = row[i];
-            if (categorymap.size() == 2)
-                datapoint.push_back(categorymap[feature] == 1);
-            else {
-                for (int j = 0; j < categorymap.size(); j++)
-                {
-                    datapoint.push_back(categorymap[feature] == j);
+            if (!feature.target){
+                switch (feature.encodingType) {
+                case (parser::encoding::OneHot):
+                    for (int j = 0; j < feature.symbols.size(); j++)
+                        datapoint.data.push_back(feature.symbols[row[j]] == j);
+                    break;
+                case (parser::encoding::Label):
+                    for (int j = 1; j < feature.symbols.size(); j++)
+                        datapoint.data.push_back(feature.symbols[row[j]] == j);
+                    break;
+                case (parser::encoding::Ordinal):
+                    //can't be fucked rn
+                    break;
+                case(parser::encoding::Unary):
+                    for (int j = 1; j < feature.symbols.size(); j++)
+                        datapoint.data.push_back(feature.symbols[row[j]] >= j);
+                    break;
                 }
+            } else {
+                datapoint.result = (bool)feature.symbols[row[i]];
             }
         }
         datapoints.push_back(datapoint);
-    }*/
+    }
 	cout << "Hello CMake." << endl;
 	return 0;
 }
