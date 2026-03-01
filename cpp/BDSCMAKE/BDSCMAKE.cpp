@@ -4,6 +4,7 @@
 #include "BDSCMAKE.h"
 #include "nlohmann/json.hpp"
 
+#include <gf2/namespace.h>
 #include <stdio.h>
 #include <iostream>
 #include <sstream>
@@ -46,29 +47,65 @@ namespace parser {
     }
 }
 
-namespace dsm {
+namespace decisionSet {
     struct literal {
-        vector<bool> terms;
-        vector<bool> annotation;
+        boost::dynamic_bitset<uint8_t> featureMask;
+        boost::dynamic_bitset<uint8_t> value;
+        boost::dynamic_bitset<uint8_t> annotation;
+    };
+    struct baseCase {
+        bool defaultValue;
+        boost::dynamic_bitset<uint8_t> annotation;
     };
     struct model {
         vector<literal> literals;
-        bool defaultValue;
+        baseCase bc;
     };
+
+
+    bool EvaluateModel(vector<binaryClassification::datapoint> &examples, model& dsm, binaryClassification::datapoint& misclassifiedExample) {
+        for (binaryClassification::datapoint example : examples) {
+            for (literal l : dsm.literals) {
+                //if ((example.data & l.featureMask)==l.value)
+            }
+        }
+        return true;
+    }
 
     size_t modelSize(model model) {
         size_t size = 0;
         for (literal literal : model.literals)
-            size += literal.terms.size();
+            size += literal.featureMask.count();
         return size;
     }
 
-    model FindOptModelStr(vector<binaryClassificationInstance::datapoint> examples, size_t size) {
-        
+    bool FindOptModelStr(vector<binaryClassification::datapoint> examples, size_t size, model& dsm) {
+        boost::dynamic_bitset<uint8_t> iA;
+        for (binaryClassification::datapoint example : examples) {
+            if (!example.result) {
+                iA = example.data;
+                break;
+            }
+        }
+        dsm.bc = {false, iA};
+        if (findOptExtSet(examples, size, dsm))
+            return true;
+
+        for (binaryClassification::datapoint example : examples) {
+            if (example.result) {
+                iA = example.data;
+                break;
+            }
+        }
+
+        return findOptExtSet(examples, size, dsm);
+    }
+
+    bool findOptExtSet(vector<binaryClassification::datapoint> examples, size_t size, model& dsm) {
     }
 }
 
-namespace classificationInstance {
+namespace genericClassifier {
     struct feature {
         string name;
         uint8_t value;
@@ -79,19 +116,28 @@ namespace classificationInstance {
         vector<feature> data;
         bool result;
     };
+    struct genericClassificationInstance{
+        vector<datapoint> datapoints;
+        vector<parser::feature> features;
+    };
 }
 
-namespace binaryClassificationInstance {
+namespace binaryClassification {
     struct datapoint {
-        vector<bool> data;
+        boost::dynamic_bitset<uint8_t> data;
         bool result;
     };
 
-    vector<datapoint> to_binaryClassificationInstance(vector<classificationInstance::datapoint> datapoints) {
+    struct binaryClassificationInstance {
+        vector<datapoint> examples;
+        vector<genericClassifier::feature> features;
+    };
+
+    binaryClassificationInstance to_binaryClassificationInstance(genericClassifier::genericClassificationInstance genericClassifierInstance) {
         vector<datapoint> bdatapoints;
-        for (classificationInstance::datapoint orgdatapoint: datapoints) {
-            vector<bool> data;
-            for (classificationInstance::feature feature: orgdatapoint.data)
+        for (genericClassifier::datapoint orgdatapoint: genericClassifierInstance.datapoints) {
+            boost::dynamic_bitset<uint8_t> data;
+            for (genericClassifier::feature feature: orgdatapoint.data)
                     switch (feature.encodingType) {
                     case (binaryEncoding::OneHot):
                         for (int j = 0; j < feature.size; j++)
@@ -112,7 +158,7 @@ namespace binaryClassificationInstance {
             
             bdatapoints.push_back({ data, orgdatapoint.result});
         }
-        return bdatapoints;
+        return { bdatapoints , genericClassifierInstance.datapoints[0].data};
     }
 }
 
@@ -261,21 +307,21 @@ int main()
     }
 
     cout << "applying feature maps to rows to create boolean vectors" << endl;
-    vector<classificationInstance::datapoint> datapoints;
+    vector<genericClassifier::datapoint> datapoints;
     for (vector<string> row : rows) {
-        classificationInstance::datapoint datapoint;
+        genericClassifier::datapoint datapoint;
         for (int i = 0; i < row.size(); i++) {
             parser::feature feature = features[i];
             if (feature.target)
                 datapoint.result = (bool)feature.symbols[row[i]];
             else {
-                classificationInstance::feature clfeature{ feature.name, feature.symbols[row[i]], feature.symbols.size(), feature.encodingType };
+                genericClassifier::feature clfeature{ feature.name, feature.symbols[row[i]], feature.symbols.size(), feature.encodingType };
                 datapoint.data.push_back(clfeature);
             }
         }
         datapoints.push_back(datapoint);
     }
-    vector<binaryClassificationInstance::datapoint> bdatapoints = binaryClassificationInstance::to_binaryClassificationInstance(datapoints);
+    vector<binaryClassification::datapoint> bdatapoints = binaryClassification::to_binaryClassificationInstance(datapoints);
 	cout << "Hello CMake." << endl;
 	return 0;
 }
