@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36511.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DecisionSets", "DecisionSets.vcxproj", "{FFFBE202-1A7D-CADA-FA67-E0836AFFAEF7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		cheeky|x64 = cheeky|x64
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FFFBE202-1A7D-CADA-FA67-E0836AFFAEF7}.cheeky|x64.ActiveCfg = cheeky|x64
+		{FFFBE202-1A7D-CADA-FA67-E0836AFFAEF7}.cheeky|x64.Build.0 = cheeky|x64
+		{FFFBE202-1A7D-CADA-FA67-E0836AFFAEF7}.Debug|x64.ActiveCfg = Debug|x64
+		{FFFBE202-1A7D-CADA-FA67-E0836AFFAEF7}.Debug|x64.Build.0 = Debug|x64
+		{FFFBE202-1A7D-CADA-FA67-E0836AFFAEF7}.Release|x64.ActiveCfg = Release|x64
+		{FFFBE202-1A7D-CADA-FA67-E0836AFFAEF7}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D42F0063-7F8B-4D95-8212-65C56DD0B3EA}
+	EndGlobalSection
+EndGlobal

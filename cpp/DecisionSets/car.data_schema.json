@@ -1,0 +1,76 @@
+[
+    {
+        "encoding": 1,
+        "name": "unknown",
+        "symbols": {
+            "high": 0,
+            "low": 1,
+            "med": 2,
+            "vhigh": 3
+        },
+        "target": false
+    },
+    {
+        "encoding": 1,
+        "name": "unknown",
+        "symbols": {
+            "high": 0,
+            "low": 1,
+            "med": 2,
+            "vhigh": 3
+        },
+        "target": false
+    },
+    {
+        "encoding": 1,
+        "name": "unknown",
+        "symbols": {
+            "2": 0,
+            "3": 1,
+            "4": 2,
+            "5more": 3
+        },
+        "target": false
+    },
+    {
+        "encoding": 1,
+        "name": "unknown",
+        "symbols": {
+            "2": 0,
+            "4": 1,
+            "more": 2
+        },
+        "target": false
+    },
+    {
+        "encoding": 1,
+        "name": "unknown",
+        "symbols": {
+            "big": 0,
+            "med": 1,
+            "small": 2
+        },
+        "target": false
+    },
+    {
+        "encoding": 1,
+        "name": "unknown",
+        "symbols": {
+            "high": 0,
+            "low": 1,
+            "med": 2
+        },
+        "target": false
+    },
+    {
+        "encoding": 1,
+        "name": "unknown",
+        "symbols": {
+            "acc": 0,
+            "good": 1,
+            "unacc": 2,
+            "vgood": 3
+        },
+        "target": false
+    }
+]
