@@ -161,7 +161,6 @@ namespace binaryClassification {
         GbCi.uniformData = true;
         vector<datapoint> zexs;
         vector<datapoint> oexs;
-        int zc = 1;
         for (datapoint example : bCi.examples) {
             example.result ? oexs.push_back(example) : zexs.push_back(example);
         }
@@ -190,7 +189,7 @@ namespace binaryClassification {
                 exampleSet32x128 te;
                 te.results = 0;
 #pragma unroll
-                for (int j = 0; j < 128;) {
+                for (int j = 0; j < 128;j++) {
                     uint32_t rt = 0;
 #pragma unroll
                     for (int k = 0; k < 32; k++) {
@@ -205,8 +204,10 @@ namespace binaryClassification {
             for (int i = 0; i < (oexs.size() / 32); i++) {
                 exampleSet32x128 te;
                 te.results = 0xFFFFFFFF;
-                for (int j = 0; j < 128;) {
+#pragma unroll
+                for (int j = 0; j < 128;j++) {
                     uint32_t rt = 0;
+#pragma unroll
                     for (int k = 0; k < 32; k++) {
                         rt |= oexs[((32 * i) + k)].data[j];
                         rt <<= 1;
@@ -251,12 +252,27 @@ namespace binaryClassification {
 
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
-//cudaError_t andWithCuda(uint32_t*c, const int* a, const int* b, unsigned int size);
+cudaError_t andWithCuda32x128(vector<uint32_t> &results, vector<binaryClassification::exampleSet32x128> examples, uint32_t fm[4]);
 
 __global__ void addKernel(int *c, const int *a, const int *b)
 {
     int i = threadIdx.x;
     c[i] = a[i] + b[i];
+}
+
+__global__ void andKernel(uint32_t* results, binaryClassification::exampleSet32x128* examples, uint32_t fm[4]) {
+    int i = threadIdx.x;
+    uint32_t rt = 0xFFFFFFFF;
+    //might need to find a dissasembler to work out what the ptx generated is ?
+    //i might also be mixing endianness??? is that even the right word -_-
+#pragma unroll
+    for (int k = 0; k < 4; k++) {
+#pragma unroll
+        for (int j = 0; j < 32; j++) {
+            rt &= (fm[k] & (1 << j)) ? examples[i].features[(32 * k) + j] : 0xFFFFFFFF;
+        }
+    }
+    results[i] = rt;
 }
 
 
@@ -421,18 +437,25 @@ int main()
 
     //idk how to choose the right data structure so fuck it we run it and fix later
     //code might be nicer if we pad the front of the features but fuck it that should be easy to switch later
-
+    //I think for models with > 128 features we prob just chunk it then reduce?
     auto GbCi = binaryClassification::toGbCi_frombCI(bCi);
 
+    vector<uint32_t> results;
+    uint32_t fm[4] = { 0,0,0,0 };
+
+    cudaError_t cudaStatus = andWithCuda32x128(results, GbCi.examples, fm);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "addWithCuda failed!");
+        return 1;
+    }
+
     const int arraySize = 5;
-    const int a[arraySize] = { 1, 2, 3, 4, 5 };
     vector<int> va = { 1,2,3,4,5 };
-    const int b[arraySize] = { 10, 20, 30, 40, 50 };
     vector<int> vb = { 10, 20, 30, 40, 50 };
     int c[arraySize] = { 0 };
 
     // Add vectors in parallel.
-    cudaError_t cudaStatus = addWithCuda(c, &va.front(), &vb.front(), arraySize);
+    cudaStatus = addWithCuda(c, &va.front(), &vb.front(), arraySize);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "addWithCuda failed!");
         return 1;
@@ -530,5 +553,72 @@ Error:
     cudaFree(dev_a);
     cudaFree(dev_b);
     
+    return cudaStatus;
+}
+// Helper function for using CUDA to add vectors in parallel.
+cudaError_t andWithCuda32x128(vector<uint32_t> &results , vector<binaryClassification::exampleSet32x128> examples, uint32_t fm[4])
+{
+    size_t size = examples.size();
+    results = std::vector<uint32_t>(size, 0);
+    binaryClassification::exampleSet32x128* dev_examples = 0;
+    uint32_t* dev_results = 0;
+    cudaError_t cudaStatus;
+    
+    // Choose which GPU to run on, change this on a multi-GPU system.
+    cudaStatus = cudaSetDevice(0);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
+        goto Error;
+    }
+
+    // Allocate GPU buffers for three vectors (two input, one output).
+    cudaStatus = cudaMalloc((void**)&dev_results, size * sizeof(uint32_t));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed!");
+        goto Error;
+    }
+
+    cudaStatus = cudaMalloc((void**)&dev_examples, size * sizeof(binaryClassification::exampleSet32x128));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed!");
+        goto Error;
+    }
+
+    // Copy input vectors from host memory to GPU buffers.
+    cudaStatus = cudaMemcpy(dev_examples, &examples.front(), size * sizeof(binaryClassification::exampleSet32x128), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+        goto Error;
+    }
+
+    // Launch a kernel on the GPU with one thread for each element.
+    andKernel << <1, size >> > (dev_results, dev_examples, fm);
+
+    // Check for any errors launching the kernel
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+        goto Error;
+    }
+
+    // cudaDeviceSynchronize waits for the kernel to finish, and returns
+    // any errors encountered during the launch.
+    cudaStatus = cudaDeviceSynchronize();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
+        goto Error;
+    }
+
+    // Copy output vector from GPU buffer to host memory.
+    cudaStatus = cudaMemcpy(&results.front(), dev_results, size * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!");
+        goto Error;
+    }
+    
+Error:
+    cudaFree(dev_results);
+    cudaFree(dev_examples);
+
     return cudaStatus;
 }
