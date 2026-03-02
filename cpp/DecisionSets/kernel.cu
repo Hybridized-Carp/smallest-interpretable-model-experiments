@@ -115,11 +115,111 @@ namespace binaryClassification {
         return zc;
     }
 
+    int padExamples(vector<datapoint> &examples) {
+        int pad = (32 - (examples.size() % 32)) % 32;
+        datapoint e = examples.back();
+        for (int i = 0; i < pad; i++)
+            examples.push_back(e);
+        return pad;
+    }
+
+    int padBinaryClassificationInstance(binaryClassificationInstance& bCi) {
+        int pad = padExamples(bCi.examples);
+        return pad;
+    }
+
+    int padExampleFeatures(datapoint &example) {
+        int pad = (128 - (example.data.size() % 128)) % 128;
+        example.data.insert(example.data.begin(), pad, 0);
+        return pad;
+    }
+
     struct transposedbinaryClassificationInstance {
         vector<bool> results;
         vector<vector<bool>> features;
     };
+
+    struct exampleSet32x128 {
+        uint32_t results;
+        uint32_t features[128];
+    };
+    struct griddedbinaryClassificationInstance {
+        bool uniformData;
+        int fpad;
+        int zpad;
+        int opad;
+        int pzexc;
+        int poexc;
+        //I should prob rewrite this so its more flexible but works for now :P
+        vector<exampleSet32x128> examples;
+    };
+
     
+
+    griddedbinaryClassificationInstance toGbCi_frombCI(binaryClassificationInstance bCi) {
+        griddedbinaryClassificationInstance GbCi;
+        GbCi.uniformData = true;
+        vector<datapoint> zexs;
+        vector<datapoint> oexs;
+        int zc = 1;
+        for (datapoint example : bCi.examples) {
+            example.result ? oexs.push_back(example) : zexs.push_back(example);
+        }
+        int lfpad = -1;
+        GbCi.zpad = padExamples(zexs);
+        for (int i = 0; i < zexs.size(); i++) {
+            int tfpad = padExampleFeatures(zexs[i]);
+            if (lfpad == -1)
+                lfpad = tfpad;
+            else if (lfpad != tfpad)
+                GbCi.uniformData = false;
+        }
+
+        GbCi.opad = padExamples(oexs);
+        for (int i = 0; i < oexs.size(); i++) {
+            int tfpad = padExampleFeatures(oexs[i]);
+            if (lfpad != tfpad)
+                GbCi.uniformData = false;
+        }
+        GbCi.pzexc = zexs.size();
+        GbCi.poexc = oexs.size();
+        GbCi.fpad = lfpad;
+        if (GbCi.uniformData) {
+            //push results
+            for (int i = 0; i < (zexs.size() / 32); i++) {
+                exampleSet32x128 te;
+                te.results = 0;
+#pragma unroll
+                for (int j = 0; j < 128;) {
+                    uint32_t rt = 0;
+#pragma unroll
+                    for (int k = 0; k < 32; k++) {
+                        rt |= zexs[((32 * i) + k)].data[j];
+                        rt <<= 1;
+                    }
+                    te.features[j] = rt;
+                }
+                
+                GbCi.examples.push_back(te);
+            }
+            for (int i = 0; i < (oexs.size() / 32); i++) {
+                exampleSet32x128 te;
+                te.results = 0xFFFFFFFF;
+                for (int j = 0; j < 128;) {
+                    uint32_t rt = 0;
+                    for (int k = 0; k < 32; k++) {
+                        rt |= oexs[((32 * i) + k)].data[j];
+                        rt <<= 1;
+                    }
+                    te.features[j] = rt;
+                }
+
+                GbCi.examples.push_back(te);
+            }
+        }
+        return GbCi;
+    }
+
     transposedbinaryClassificationInstance from_binaryClassificationInstance(binaryClassificationInstance bCi) {
         transposedbinaryClassificationInstance tbCi;
         for (datapoint example : bCi.examples)
@@ -133,7 +233,7 @@ namespace binaryClassification {
         return tbCi;
     }
 
-    binaryClassificationInstance from_transposedbinaryClassificationInstance(transposedbinaryClassificationInstance tbCi) {
+    /*binaryClassificationInstance from_transposedbinaryClassificationInstance(transposedbinaryClassificationInstance tbCi) {
         binaryClassificationInstance bCi;
         for (bool result : tbCi.results) {
             datapoint d;
@@ -146,18 +246,18 @@ namespace binaryClassification {
                 bCi.examples[i].data.push_back(f[i]);
         }
         return bCi;
-    }
+    }*/
 }
 
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
+//cudaError_t andWithCuda(uint32_t*c, const int* a, const int* b, unsigned int size);
 
 __global__ void addKernel(int *c, const int *a, const int *b)
 {
     int i = threadIdx.x;
     c[i] = a[i] + b[i];
 }
-
 
 
 int main()
@@ -317,15 +417,12 @@ int main()
     binaryClassification::binaryClassificationInstance bCi = binaryClassification::from_genericClassificationInstance(gci);
     cout << "Hello CMake." << endl;
 
-    int f1pos = binaryClassification::sortBinaryClassificationInstance(bCi);
+    
+
     //idk how to choose the right data structure so fuck it we run it and fix later
+    //code might be nicer if we pad the front of the features but fuck it that should be easy to switch later
 
-    binaryClassification::transposedbinaryClassificationInstance tbCi = binaryClassification::from_binaryClassificationInstance(bCi);
-
-    vector<char> cresults;
-    for (bool b : tbCi.results) {
-        cresults.push_back(b);
-    }
+    auto GbCi = binaryClassification::toGbCi_frombCI(bCi);
 
     const int arraySize = 5;
     const int a[arraySize] = { 1, 2, 3, 4, 5 };
@@ -354,6 +451,7 @@ int main()
 
     return 0;
 }
+
 
 // Helper function for using CUDA to add vectors in parallel.
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
