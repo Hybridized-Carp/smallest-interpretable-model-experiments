@@ -115,7 +115,7 @@ namespace binaryClassification {
         return zc;
     }
 
-    int padExamples(vector<datapoint> &examples, unsigned int chunk_size = 32) {
+    int padExamples(vector<datapoint>& examples, unsigned int chunk_size = 32) {
         int pad = (chunk_size - (examples.size() % chunk_size)) % chunk_size;
         datapoint e = examples.back();
         for (int i = 0; i < pad; i++)
@@ -128,7 +128,7 @@ namespace binaryClassification {
         return pad;
     }
 
-    int padExampleFeatures(datapoint &example) {
+    int padExampleFeatures(datapoint& example) {
         int pad = (128 - (example.data.size() % 128)) % 128;
         example.data.insert(example.data.begin(), pad, 0);
         return pad;
@@ -433,7 +433,7 @@ struct featureMask2x4x32 {
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 cudaError_t andWithCuda32x128(vector<uint32_t> &results, vector<binaryClassification::exampleSet32x128> examples, featureMask16x8 fm);
-cudaError_t evaluateTermWithCuda32x128(vector<uint32_t>& results, vector<binaryClassification::exampleSet32x128> examples, featureMask2x8x16 fm);
+cudaError_t evaluateTermWithCuda32x128(vector<uint32_t>& results, vector<binaryClassification::exampleSet32x128> examples, featureMask2x4x32 fm);
 cudaError_t andWithCuda16x128(vector<uint16_t>& results, vector<binaryClassification::exampleSet16x128> examples, featureMask16x8 fm);
 cudaError_t evaluateTermWithCuda16x128(vector<uint16_t>& results, vector<binaryClassification::exampleSet16x128> examples, featureMask2x4x32 fm);
 
@@ -584,25 +584,21 @@ __global__ void evaluateTermKernel16x128(
     }
 }
 
+__forceinline __device__ uint32_t bmgen(uint32_t j) {
+    return 1 << j;
+}
+
 __global__ void evaluateTermKernel32x128(
     uint32_t* results,
     binaryClassification::exampleSet32x128* examples,
-    unsigned short zm1,
-    unsigned short zm2,
-    unsigned short zm3,
-    unsigned short zm4,
-    unsigned short zm5,
-    unsigned short zm6,
-    unsigned short zm7,
-    unsigned short zm8,
-    unsigned short om1,
-    unsigned short om2,
-    unsigned short om3,
-    unsigned short om4,
-    unsigned short om5,
-    unsigned short om6,
-    unsigned short om7,
-    unsigned short om8,
+    uint32_t zm1,
+    uint32_t zm2,
+    uint32_t zm3,
+    uint32_t zm4,
+    uint32_t om1,
+    uint32_t om2,
+    uint32_t om3,
+    uint32_t om4,
     int datapoints) {
     int i = threadIdx.x + blockDim.x * blockIdx.x;
     if (i < datapoints) {
@@ -610,35 +606,40 @@ __global__ void evaluateTermKernel32x128(
         uint32_t zt = 0x0;
         //might need to find a dissasembler to work out what the ptx generated is ?
         //i might also be mixing endianness??? is that even the right word -_-
-        uint32_t bm = 1;
+        int j = 0;
 #pragma unroll
-        for (int j = 0; j < 16; j++) {
-            zt |= (zm1 & bm) ? examples[i].features[j] : 0;
-            zt |= (zm2 & bm) ? examples[i].features[16 + j] : 0;
-            zt |= (zm3 & bm) ? examples[i].features[32 + j] : 0;
-            zt |= (zm4 & bm) ? examples[i].features[48 + j] : 0;
-            zt |= (zm5 & bm) ? examples[i].features[64 + j] : 0;
-            zt |= (zm6 & bm) ? examples[i].features[80 + j] : 0;
-            zt |= (zm7 & bm) ? examples[i].features[96 + j] : 0;
-            zt |= (zm8 & bm) ? examples[i].features[112 + j] : 0;
-            bm <<= 1;
-        }
-        bm = 1;
+            for (; j < 32; j++) {
+                zt |= (zm1 & 80000000) ? examples[i].features[j] : 0;
+                ot &= (om1 & 80000000) ? examples[i].features[j] : 0xFFFFFFFF;
+                zm1 <<= 1;
+                om1 <<= 1;
+            }
 #pragma unroll
-        for (int j = 0; j < 16; j++) {
-            ot &= (om1 & bm) ? examples[i].features[j] : 0xFFFFFFFF;
-            ot &= (om2 & bm) ? examples[i].features[16 + j] : 0xFFFFFFFF;
-            ot &= (om3 & bm) ? examples[i].features[32 + j] : 0xFFFFFFFF;
-            ot &= (om4 & bm) ? examples[i].features[48 + j] : 0xFFFFFFFF;
-            ot &= (om5 & bm) ? examples[i].features[64 + j] : 0xFFFFFFFF;
-            ot &= (om6 & bm) ? examples[i].features[80 + j] : 0xFFFFFFFF;
-            ot &= (om7 & bm) ? examples[i].features[96 + j] : 0xFFFFFFFF;
-            ot &= (om8 & bm) ? examples[i].features[112 + j] : 0xFFFFFFFF;
-            bm <<= 1;
-        }
+            for (; j < 64; j++) {
+                zt |= (zm2 & 80000000) ? examples[i].features[32 + j] : 0;
+                ot &= (om2 & 80000000) ? examples[i].features[32 + j] : 0xFFFFFFFF;
+                zm2 <<= 1;
+                om2 <<= 1;
+            }
+#pragma unroll
+            for (; j < 96; j++) {
+                zt |= (zm3 & 80000000) ? examples[i].features[64 + j] : 0;
+                ot &= (om3 & 80000000) ? examples[i].features[64 + j] : 0xFFFFFFFF;
+                zm3 <<= 1;
+                om3 <<= 1;
+            }
+#pragma unroll
+            for (; j < 128; j++){
+                zt |= (zm4 & 80000000) ? examples[i].features[96 + j] : 0;
+                ot &= (om4 & 80000000) ? examples[i].features[96 + j] : 0xFFFFFFFF;
+                zm4 <<= 1;
+                om4 <<= 1;
+            }
         results[i] = ot & (~zt);
     }
 }
+
+
 
 
 int main()
@@ -823,7 +824,7 @@ int main()
     fill(fm2.zf, fm2.zf + 8, 0);
     fill(fm2.of, fm2.of + 8, 0);
 
-    cudaStatus = evaluateTermWithCuda32x128(results2, GbCi32x128.examples, fm2);
+    cudaStatus = evaluateTermWithCuda32x128(results2, GbCi32x128.examples, fm3);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "evaluateTermWithCuda failed!");
         return 1;
@@ -1036,7 +1037,7 @@ Error:
     return cudaStatus;
 }
 
-cudaError_t evaluateTermWithCuda32x128(vector<uint32_t>& results, vector<binaryClassification::exampleSet32x128> examples, featureMask2x8x16 fm)
+cudaError_t evaluateTermWithCuda32x128(vector<uint32_t>& results, vector<binaryClassification::exampleSet32x128> examples, featureMask2x4x32 fm)
 {
     size_t size = examples.size();
     results = std::vector<uint32_t>(size, 0);
@@ -1077,18 +1078,10 @@ cudaError_t evaluateTermWithCuda32x128(vector<uint32_t>& results, vector<binaryC
         fm.zf[1],
         fm.zf[2],
         fm.zf[3],
-        fm.zf[4],
-        fm.zf[5],
-        fm.zf[6],
-        fm.zf[7],
         fm.of[0],
         fm.of[1],
         fm.of[2],
         fm.of[3],
-        fm.of[4],
-        fm.of[5],
-        fm.of[6],
-        fm.of[7],
         size);
 
     // Check for any errors launching the kernel
