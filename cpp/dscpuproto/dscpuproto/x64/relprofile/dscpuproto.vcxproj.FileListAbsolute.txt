@@ -1,0 +1,5 @@
+C:\Users\ts-ga\Documents\uni\cat-meow\proto\profiledecsetproto\dscpuproto\x64\relprofile\hpx.dll
+C:\Users\ts-ga\Documents\uni\cat-meow\proto\profiledecsetproto\dscpuproto\x64\relprofile\hpx_core.dll
+C:\Users\ts-ga\Documents\uni\cat-meow\proto\profiledecsetproto\dscpuproto\x64\relprofile\hwloc-15.dll
+C:\Users\ts-ga\Documents\uni\cat-meow\proto\profiledecsetproto\dscpuproto\dscpuproto\x64\relprofile\dscpupro.177964EA.Up2Date
+C:\Users\ts-ga\Documents\uni\cat-meow\proto\profiledecsetproto\dscpuproto\x64\relprofile\hpx_iostreams.dll
