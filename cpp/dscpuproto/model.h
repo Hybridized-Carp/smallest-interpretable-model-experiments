@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include "dataset.h"
 using namespace std;
 namespace model {
