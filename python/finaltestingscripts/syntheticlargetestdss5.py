@@ -62,7 +62,7 @@ def bitmask_term_to_numpy_term(term):
 def evaluate_numpy_term(t_examples, term):
     z_res = np.bitwise_or.reduce(t_examples[term[0]])
     o_res = np.bitwise_and.reduce(t_examples[term[1]])
-    return o_res & ~z_res
+    return (o_res & ~z_res).reshape(-1,1)
 
 #can't be fucked to think of a good name for this rn
 #but its basically a helper function where we provide in the base model results
@@ -74,8 +74,14 @@ def party_function(t_examples,t_results, m_results):
         new_bm_term=model[0][0][-1]
         np_term = bitmask_term_to_numpy_term(new_bm_term)
         term_res = evaluate_numpy_term(t_examples, np_term) 
-        m_res = m_results | ( ~term_res if model[1] else term_res)
-        return int (np.sum(np.bitwise_count(m_results^t_results)))
+        m_res = np.bitwise_or(m_results,term_res)
+        if not model[1]:
+            m_res = ~m_res
+        lol=m_res^t_results
+        score = int (np.sum(np.bitwise_count(lol)))
+        #print(np_term)
+        #print(score)
+        return score
     return scorer
 
         
@@ -177,8 +183,10 @@ def FindOptExtStr(
             if A != None:
                 if B == None:
                     B=A
+                    size = dsmsize(B)
                 elif dsmsize(B) > dsmsize(A):
                     B=A
+                    size = dsmsize(B)
     return B
                  
 
@@ -204,7 +212,7 @@ def FindStrictExtStr(
             for term in model[0]:
                 np_term = bitmask_term_to_numpy_term(term)
                 term_res = evaluate_numpy_term(t_examples,np_term) 
-                m_res = np.bitwise_or(m_res,(~term_res if model[1] else term_res))
+                m_res = np.bitwise_or(m_res,term_res)
         for fba in ifbaset:
             nA = annotations.copy()
             new_term=(fba,(fba&example))
@@ -213,7 +221,7 @@ def FindStrictExtStr(
             tmodel[0].append(new_term)
             extensions.append([tmodel,nA])
         if use_heuristics:
-            sorted(extensions, key=party_function(t_examples, t_results, m_res))
+            extensions = sorted(extensions, key=party_function(t_examples, t_results, m_res))
         return extensions
     #if multiple terms fuck us up how do we know that we chose the right one :(
     t=-1
@@ -319,8 +327,8 @@ else:
         print("psrng is not initialised as expected")
         exit()
     fbaset=[]
-    ex_count=2048
-    f_count=48
+    ex_count=8124
+    f_count=116
     padding=(8-(ex_count%8))%8
     tnp=np.ndarray(shape=(ex_count+padding,f_count),dtype=bool)
     result_tnp=np.ndarray(shape=ex_count+padding, dtype=bool)
@@ -330,7 +338,7 @@ else:
         fbasdci.append(baclsf(temp_fba))
     pr = cProfile.Profile()
     pr.enable()
-    a = FindOptModelStr(fbasdci,5,True)
+    a = FindOptModelStr(fbasdci,7,False)
     pr.disable()
     # - for text dump
     print(os.curdir)
@@ -341,6 +349,7 @@ else:
 
 
 print(a)
+print(dsmsize(a))
 #dbadmstoreadable(a)
 #print(X_hot.columns[19])
 #if a != None:
